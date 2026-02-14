@@ -74,3 +74,11 @@ On EKS you may need to allow insecure kubelet TLS (common in some setups). Patch
 kubectl -n kube-system patch deployment metrics-server --type='json' -p='[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--kubelet-insecure-tls"}]'
 ```
 
+## VPA
+
+By default VPA is not present in EKS, so we need to install it.
+
+```bash
+helm repo add fairwinds-stable https://charts.fairwinds.com/stable
+helm install vpa fairwinds-stable/vpa --namespace vpa --create-namespace
+```
