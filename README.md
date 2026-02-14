@@ -82,3 +82,94 @@ By default VPA is not present in EKS, so we need to install it.
 helm repo add fairwinds-stable https://charts.fairwinds.com/stable
 helm install vpa fairwinds-stable/vpa --namespace vpa --create-namespace
 ```
+
+## RBAC over EKS
+
+The idea is to create a role for a user to access the EKS cluster. Before we create, we need few things:
+- IAM User with programmatic access (CLI).
+- This IAM user should have `AmazonEKSClusterPolicy` attached to it.
+- Roles and Rolebinding that needs to be created.
+
+Let's follow the steps
+- Step 1: Create IAM user and attach the policy specified above. Let's say the user that you created is `demo-eks-user`
+- Step 2: EKS authentication works via `aws-auth ConfigMap`. So, we need to configure this to add the user to it.
+    Run the command 
+    ```bash
+    kubectl edit configmap aws-auth -n kube-system
+    ```
+    Add this below block:
+    ```bash
+    mapUsers: |
+        - userarn: arn:aws:iam::975050024946:user/demo-eks-user
+            username: dev-user
+            groups:
+            - dev-group
+    ```
+
+    Do modify the arn of the user.
+
+- Step 3: Create Role and apply it.
+    ```bash
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: Role
+    metadata:
+    namespace: default
+    name: developer-role
+    rules:
+    - apiGroups: ["", "apps"]
+    resources:
+        - pods
+        - services
+        - deployments
+        - replicasets
+    verbs:
+        - get
+        - list
+        - watch
+        - create
+        - update
+        - delete
+    ```
+    ```bash
+    kubectl apply -f developer-role.yml
+    ```
+
+4. Step 4: Now bind this role to the group.
+    ```bash
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: RoleBinding
+    metadata:
+    name: developer-binding
+    namespace: default
+    subjects:
+    - kind: Group
+    name: dev-group
+    apiGroup: rbac.authorization.k8s.io
+
+    roleRef:
+    kind: Role
+    name: developer-role
+    apiGroup: rbac.authorization.k8s.io
+    ```
+    ```bash
+    kubectl apply -f developer-binding.yaml
+    ```
+
+5. Step 5: Now configure this user to the cluster and run the kubectl command.
+    ```bash
+    aws configure
+    aws eks update-kubeconfig  --region ap-south-1 --name <your-cluster-name>
+    ```
+    User can:
+    ```bash
+    kubectl get pods
+    kubectl create deployment
+    kubectl update services
+    ```
+
+    User cannot:
+    ```bash
+    delete nodes
+    modify RBAC
+    access other namespaces
+    ```
